@@ -1,81 +1,243 @@
-import java.io.*;
-import java.net.Socket;
-
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
-import java.util.EventListener;
+import java.awt.event.ActionListener;
+import java.awt.event.MouseListener;
+import java.io.BufferedReader;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.EventObject;
+
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.border.EmptyBorder;
+import javax.swing.event.MouseInputAdapter;
+import javax.swing.plaf.FontUIResource;
+
+import org.w3c.dom.events.MouseEvent;
 
 public class Client {
-    public static void main(String[] args) {
-        final File[] filetoSend = new File[1];
+    static ArrayList<MyFile> myfiles = new ArrayList<>();
+
+    public static void main(String[] args) throws IOException {
+
+        int fileId = 0;
+
         JFrame jFrame = new JFrame("Client");
-        jFrame.setSize(450,450);
+        jFrame.setSize(400, 400);
         jFrame.setLayout(new BoxLayout(jFrame.getContentPane(), BoxLayout.Y_AXIS));
         jFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        JLabel jlTitle = new JLabel("Sender");
-        jlTitle.setFont(new Font("Arial",Font.BOLD,25));
-        jlTitle.setBorder(new EmptyBorder(20,0,10,0));
-        jlTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
-        JLabel jlFileName = new JLabel("Choose File to send");
-        jlFileName.setFont(new Font("Arial",Font.BOLD,20));
-        jlFileName.setBorder(new EmptyBorder(50,0,0,0));
-        jlFileName.setAlignmentX(Component.CENTER_ALIGNMENT);
-        JPanel jpButton = new JPanel();
-        jpButton .setBorder(new EmptyBorder(75,0,10,0));
-        JButton jbSendFile = new JButton("Send File");
-        jbSendFile.setPreferredSize(new Dimension(150,75));
-        jbSendFile.setFont(new Font("Arial",Font.BOLD,20));
 
-        JButton jbChooseFile = new JButton("Choose File");
-        jbChooseFile.setPreferredSize(new Dimension(150,75));
-        jbChooseFile.setFont(new Font("Arial",Font.BOLD,20));
+        JPanel jPanel = new JPanel();
+        jPanel.setLayout(new BoxLayout(jPanel, BoxLayout.Y_AXIS));
 
-        jpButton.add(jbSendFile);
-        jpButton.add(jbChooseFile);
-        jbChooseFile.addActionListener(new ActionListener(){
-            public void actionPerformed(ActionEvent e){
-                JFileChooser jFileChooser = new JFileChooser();
-                jFileChooser.setDialogTitle("Choose a file to send");
-                if(jFileChooser.showOpenDialog(null)==JFileChooser.APPROVE_OPTION){
-                    filetoSend[0] = jFileChooser.getSelectedFile();    
-                    jlFileName.setText("The file you want to send is "+filetoSend[0].getName());
-                }
-            }
-        });
-        jbSendFile.addActionListener(new ActionListener(){
-            public void actionPerformed(ActionEvent e){
-                if(filetoSend[0]==null){
-                    jlFileName.setText("Please choose a file first");
-                   
-                }else{
-                   try{ 
-                    FileInputStream fileInputStream = new FileInputStream(filetoSend[0].getAbsolutePath());
-                    Socket socket = new Socket("localhost",1234);
-                    DataOutputStream dataOutputStream = new DataOutputStream(socket.getOutputStream());
-                    String fileName = filetoSend[0].getName();
-                    byte[] fileNameBytes = fileName.getBytes();
+        JScrollPane jScrollPane = new JScrollPane(jPanel);
+        jScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
 
-                    byte[] fileContentBytes = new byte[(int)filetoSend[0].length()];
-                    fileInputStream.read(fileContentBytes);
+        JLabel jTitle = new JLabel("Client");
+        jTitle.setFont(new FontUIResource("Arial", Font.BOLD, 25));
+        jTitle.setBorder(new EmptyBorder(20, 0, 10, 0));
+        jTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-                    dataOutputStream.writeInt(fileNameBytes.length);
-                    dataOutputStream.write(fileNameBytes);
-
-                    dataOutputStream.writeInt(fileContentBytes.length);
-                    dataOutputStream.write(fileContentBytes);
-
-                
-                }catch(IOException exep){
-                    exep.printStackTrace();
-                }
-                }
-            }
-        });
-        jFrame.add(jlTitle);
-        jFrame.add(jlFileName);
-        jFrame.add(jpButton);
+        jFrame.add(jTitle);
+        jFrame.add(jScrollPane);
         jFrame.setVisible(true);
+
+        ServerSocket serverSocket = new ServerSocket(1234);
+
+        while (true) {
+            try {
+                Socket socket = serverSocket.accept();
+
+                DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
+
+                int fileNameLength = dataInputStream.readInt();
+
+                if (fileNameLength > 0) {
+                    byte[] fileNameBytes = new byte[fileNameLength];
+                    dataInputStream.readFully(fileNameBytes, 0, fileNameBytes.length);
+                    String fileName = new String(fileNameBytes);
+
+                    int fileContentLength = dataInputStream.readInt();
+
+                    if (fileContentLength > 0) {
+
+                        byte[] fileContentBytes = new byte[fileContentLength];
+                        dataInputStream.readFully(fileContentBytes, 0, fileContentLength);
+
+                        JPanel jpFileRow = new JPanel();
+                        jpFileRow.setLayout(new BoxLayout(jpFileRow, BoxLayout.Y_AXIS));
+
+                        JLabel jlFileName = new JLabel(fileName);
+                        jlFileName.setFont(new Font("Arial", Font.BOLD, 20));
+                        jlFileName.setBorder(new EmptyBorder(10, 0, 10, 0));
+                        jlFileName.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+                        if (getFileExtension(fileName).equalsIgnoreCase("txt")) {
+
+                            jpFileRow.setName(String.valueOf(fileId));
+                            jpFileRow.addMouseListener((java.awt.event.MouseListener) getMyMouseListener());
+
+                            jpFileRow.add(jlFileName);
+                            jPanel.add(jpFileRow);
+                            jFrame.validate();
+
+                        } else {
+
+                            jpFileRow.setName(String.valueOf(fileId));
+                            jpFileRow.addMouseListener(getMyMouseListener());
+
+                            jpFileRow.add(jlFileName);
+                            jPanel.add(jpFileRow);
+                            jFrame.validate();
+
+                        }
+                        myfiles.add(new MyFile(fileId, fileName, fileContentBytes, getFileExtension(fileName)));
+                        fileId++;
+                    }
+
+                }
+
+            } catch (IOException error) {
+                error.printStackTrace();
+            }
+        }
+    }
+
+    public static MouseListener getMyMouseListener() {
+
+        return new MouseListener() {
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                // TODO Auto-generated method stub
+
+            }
+
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                // TODO Auto-generated method stub
+
+            }
+
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                // TODO Auto-generated method stub
+
+            }
+
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                // TODO Auto-generated method stub
+
+            }
+
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                JPanel jPanel = (JPanel) e.getSource();
+
+                int fileId = Integer.parseInt(jPanel.getName());
+
+                for (MyFile myfile : myfiles) {
+                    if (myfile.getId() == fileId) {
+                        JFrame jfPreview = createFrame(myfile.getName(), myfile.getData(), myfile.getFileExtension());
+                        jfPreview.setVisible(true);
+                    }
+                }
+            }
+        };
+
+    }
+
+    public static String getFileExtension(String fileName) {
+        int i = fileName.lastIndexOf('.');
+
+        if (i > 0) {
+            return fileName.substring(i + i);
+        } else {
+            return "No extension found";
+        }
+    }
+
+    public static JFrame createFrame(String fileName, byte[] fileData, String fileExtension) {
+        JFrame jFrame = new JFrame("File Downloader");
+        jFrame.setSize(400, 400);
+
+        JPanel jPanel = new JPanel();
+        jPanel.setLayout(new BoxLayout(jPanel, BoxLayout.Y_AXIS));
+
+        JLabel jlTitle = new JLabel("File Downloader");
+        jlTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+        jlTitle.setFont(new Font("Arial", Font.BOLD, 25));
+        jlTitle.setBorder(new EmptyBorder(20, 0, 10, 0));
+
+        JLabel jlPromt = new JLabel("Are you sure you want to download " + fileName);
+        jlPromt.setFont(new Font("Arial", Font.BOLD, 20));
+        jlPromt.setBorder(new EmptyBorder(20, 0, 10, 0));
+        jlPromt.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JButton jbYes = new JButton("Yes");
+        jbYes.setPreferredSize(new Dimension(150, 75));
+        jbYes.setFont(new Font("Arial", Font.BOLD, 20));
+
+        JButton jbNo = new JButton("No");
+        jbNo.setPreferredSize(new Dimension(150, 75));
+        jbNo.setFont(new Font("Arial", Font.BOLD, 20));
+
+        JLabel jlFileContent = new JLabel();
+        jlFileContent.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JPanel jpButtons = new JPanel();
+        jpButtons.setBorder(new EmptyBorder(20, 0, 10, 0));
+        jpButtons.add(jbYes);
+        jpButtons.add(jbNo);
+
+        if (fileExtension.equalsIgnoreCase("txt")) {
+            jlFileContent.setText("<html>" + new String(fileData) + "</html>");
+        } else {
+            jlFileContent.setIcon(new ImageIcon(fileData));
+        }
+
+        jbYes.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                File filetoDownload = new File(fileName);
+                try {
+                    FileOutputStream fileOutputStream = new FileOutputStream(filetoDownload);
+                    fileOutputStream.write(fileData);
+                    fileOutputStream.close();
+                    jFrame.dispose();
+                } catch (IOException error) {
+                    error.printStackTrace();
+                }
+            }
+
+        });
+
+        jbNo.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                jFrame.dispose();
+            }
+        });
+        jPanel.add(jlTitle);
+        jPanel.add(jlPromt);
+        jPanel.add(jlFileContent);
+        jPanel.add(jpButtons);
+
+        jFrame.add(jPanel);
+        return jFrame;
+
     }
 }
